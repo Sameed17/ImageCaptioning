@@ -5,9 +5,6 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader, random_split
 from tqdm import tqdm
 
-CAPTIONS_PATH = "data/captions.txt"
-FEATURES_PATH = "flickr30k_features.pkl"
-
 
 class Vocabulary:
     PAD, START, END, UNK = "<pad>", "<start>", "<end>", "<unk>"
@@ -143,11 +140,11 @@ def collate_batch(batch):
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    pairs = load_captions(CAPTIONS_PATH)
+    pairs = load_captions("data/captions.txt")
     vocab = Vocabulary(min_freq=2)
     vocab.build([cap for _, cap in pairs])
 
-    ds = CaptionDataset(FEATURES_PATH, pairs, vocab)
+    ds = CaptionDataset("flickr30k_features.pkl", pairs, vocab)
     train_ds, val_ds = random_split(ds, [int(0.9 * len(ds)), len(ds) - int(0.9 * len(ds))])
 
     train_loader = DataLoader(train_ds, batch_size=64, shuffle=True, collate_fn=collate_batch)
