@@ -1,0 +1,2 @@
+caption_model.pt filter=lfs diff=lfs merge=lfs -text
+flickr30k_features.pkl filter=lfs diff=lfs merge=lfs -text
