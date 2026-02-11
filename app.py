@@ -4,7 +4,7 @@ import pickle
 import os
 from PIL import Image
 from io import BytesIO
-from train import ImageCaptioner, greedy_search, load_captions
+from train import ImageCaptioner, greedy_search, load_captions, Vocabulary
 from torchvision import transforms
 
 # Page configuration
