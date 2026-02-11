@@ -5,11 +5,11 @@ import os
 from PIL import Image
 from io import BytesIO
 from train import ImageCaptioner, greedy_search, load_captions
+from torchvision import transforms
 
 # Page configuration
 st.set_page_config(
     page_title="Image Captioning",
-    page_icon="🖼️",
     layout="centered",
     initial_sidebar_state="expanded"
 )
@@ -36,7 +36,7 @@ def load_model_and_data():
     features_path = "flickr30k_features.pkl"
     
     if not os.path.isfile(checkpoint_path):
-        st.error(f"❌ Model not found: {checkpoint_path}. Please train with train.py first.")
+        st.error(f"Model not found: {checkpoint_path}. Please train with train.py first.")
         st.stop()
     
     try:
@@ -51,20 +51,20 @@ def load_model_and_data():
                 features = pickle.load(f)
         else:
             features = {}
-            st.warning("⚠️ Features file not found. Pre-extracted features unavailable.")
+            st.warning("Features file not found. Pre-extracted features unavailable.")
         
         pairs = load_captions("data/captions.txt") if os.path.isfile("data/captions.txt") else []
         pairs = [(img, cap) for img, cap in pairs if img in features]
         
         return model, vocab, features, pairs
     except Exception as e:
-        st.error(f"❌ Error loading model: {str(e)}")
+        st.error(f"Error loading model: {str(e)}")
         st.stop()
 
 
 def main():
     # Title and description
-    st.title("🖼️ Image Captioning")
+    st.title("Image Captioning")
     st.write("Generate automatic captions for images using a deep learning model.")
     
     # Load model and data
@@ -72,7 +72,7 @@ def main():
     
     # Sidebar with info
     with st.sidebar:
-        st.header("ℹ️ About")
+        st.header("About")
         st.write("""
         This app uses an **Image Captioning Model** that combines:
         - **ResNet-50**: Extracts visual features from images
@@ -82,12 +82,12 @@ def main():
         """)
         
         st.divider()
-        st.subheader("📊 Dataset Stats")
+        st.subheader("Dataset Stats")
         st.metric("Available Images", len(pairs))
         st.metric("Vocabulary Size", len(vocab.word2idx))
     
     # Tabs for different interfaces
-    tab1, tab2, tab3 = st.tabs(["📤 Upload Image", "📁 Dataset Sample", "❓ How It Works"])
+    tab1, tab2, tab3 = st.tabs(["📤 Upload Image", "Dataset Sample", "How It Works"])
     
     with tab1:
         st.subheader("Upload Your Image")
@@ -105,11 +105,10 @@ def main():
             with col2:
                 st.write("")
                 st.write("")
-                if st.button("✨ Generate Caption", use_container_width=True):
+                if st.button("Generate Caption", use_container_width=True):
                     with st.spinner("Generating caption..."):
                         try:
                             # Convert image to model input format
-                            from torchvision import transforms
                             transform = transforms.Compose([
                                 transforms.Resize((224, 224)),
                                 transforms.ToTensor(),
@@ -130,11 +129,11 @@ def main():
                             
                             caption = greedy_search(model, feature.squeeze(0), vocab, device=device)
                             
-                            st.success("✅ Caption Generated!")
-                            st.markdown(f"### 📝 Caption:\n**{caption}**")
+                            st.success("Caption Generated!")
+                            st.markdown(f"###Caption:\n**{caption}**")
                             
                         except Exception as e:
-                            st.error(f"❌ Error generating caption: {str(e)}")
+                            st.error(f"Error generating caption: {str(e)}")
     
     with tab2:
         st.subheader("Sample Captions from Dataset")
@@ -155,7 +154,7 @@ def main():
                     st.write(f"**Caption {i}:**")
                     st.info(caption)
         else:
-            st.warning("⚠️ No dataset captions available. Please ensure data/captions.txt exists.")
+            st.warning("No dataset captions available. Please ensure data/captions.txt exists.")
     
     with tab3:
         st.subheader("How This Model Works")
