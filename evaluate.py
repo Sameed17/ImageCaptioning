@@ -1,9 +1,11 @@
 import os
 import pickle
 import random
+import textwrap
 import torch
 from tqdm import tqdm
 from PIL import Image
+import matplotlib.pyplot as plt
 
 from train import Vocabulary, ImageCaptioner, greedy_search, load_captions, compute_bleu4
 
@@ -60,11 +62,6 @@ def plot_loss_curve(history, out_path=None):
     if not history.get("train_loss") and not history.get("val_loss"):
         print("No loss history. Run train.py first.")
         return
-    try:
-        import matplotlib.pyplot as plt
-    except ImportError:
-        print("matplotlib not installed.")
-        return
     output_path = out_path or "loss_curve.png"
     plt.figure(figsize=(8, 5))
     if history.get("train_loss"):
@@ -109,25 +106,23 @@ def run_evaluation():
     print(f"Recall:    {recall:.4f}")
     print(f"F1-score:  {f1_score:.4f}")
 
-    try:
-        import matplotlib.pyplot as plt
-        figure, axes = plt.subplots(2, 3, figsize=(12, 8))
-        axes = axes.flatten()
-        for index, example in enumerate(examples[:5]):
-            axis = axes[index]
-            if example["image_path"]:
-                image = Image.open(example["image_path"]).convert("RGB")
-                axis.imshow(image)
-            axis.set_title(example["image"][:20] + "...")
-            axis.axis("off")
-            axis.text(0.5, -0.15, f"GT: {example['ground_truth'][:50]}{'...' if len(example['ground_truth']) > 50 else ''}\nPred: {example['predicted'][:50]}{'...' if len(example['predicted']) > 50 else ''}", transform=axis.transAxes, fontsize=8, ha="center", wrap=True)
-        axes[5].axis("off")
-        plt.suptitle("Caption Examples")
-        plt.tight_layout()
-        plt.savefig("caption_examples.png", bbox_inches="tight")
-        print("\nFigure saved to caption_examples.png")
-    except Exception as error:
-        print(f"Could not save figure: {error}")
+    figure, axes = plt.subplots(2, 3, figsize=(12, 8))
+    axes = axes.flatten()
+    for index, example in enumerate(examples[:5]):
+        axis = axes[index]
+        if example["image_path"]:
+            image = Image.open(example["image_path"]).convert("RGB")
+            axis.imshow(image)
+        axis.set_title(example["image"][:20] + "...")
+        axis.axis("off")
+        gt_wrapped = textwrap.fill(example["ground_truth"], width=50)
+        pred_wrapped = textwrap.fill(example["predicted"], width=50)
+        axis.text(0.5, -0.15, f"GT: {gt_wrapped}\nPred: {pred_wrapped}", transform=axis.transAxes, fontsize=8, ha="center", va="top")
+    axes[5].axis("off")
+    plt.suptitle("Caption Examples")
+    plt.tight_layout()
+    plt.savefig("caption_examples.png", bbox_inches="tight")
+    print("\nFigure saved to caption_examples.png")
 
 
 if __name__ == "__main__":

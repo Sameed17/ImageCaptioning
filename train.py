@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader, random_split
 from tqdm import tqdm
-
+from nltk.translate.bleu_score import corpus_bleu
 
 class Vocabulary:
     PAD, START, END, UNK = "<pad>", "<start>", "<end>", "<unk>"
@@ -27,12 +27,11 @@ class Vocabulary:
                 self.word2idx[word] = i
                 self.idx2word[i] = word
 
-    def encode(self, caption, add_special=True):
-        out = [self.word2idx[self.START]] if add_special else []
+    def encode(self, caption):
+        out = [self.word2idx[self.START]]
         for w in self._tokenize(caption):
             out.append(self.word2idx.get(w, self.word2idx[self.UNK]))
-        if add_special:
-            out.append(self.word2idx[self.END])
+        out.append(self.word2idx[self.END])
         return out
 
     def decode(self, ids):
@@ -53,7 +52,7 @@ def load_captions(path):
 
 
 class Encoder(nn.Module):
-    def __init__(self, input_dim=2048, hidden=512, dropout=0.5):
+    def __init__(self, input_dim=2048, hidden=1024, dropout=0.5):
         super().__init__()
         self.fc = nn.Linear(input_dim, hidden)
         self.dropout = nn.Dropout(dropout)
@@ -70,7 +69,7 @@ class ImageCaptioner(nn.Module):
         self.encoder = Encoder(2048, hidden)
         self.embed = nn.Embedding(vocab_size, embed, padding_idx=0)
         self.embed_dropout = nn.Dropout(dropout)
-        self.lstm = nn.LSTM(embed, hidden, batch_first=True, dropout=0)
+        self.lstm = nn.LSTM(embed, hidden, batch_first=True)
         self.fc_dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(hidden, vocab_size)
 
@@ -103,14 +102,9 @@ def greedy_search(model, feat, vocab, max_len=50, device="cpu"):
 
 
 def compute_bleu4(refs, hyps):
-    try:
-        from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
-    except ImportError:
-        return 0.0
     refs = [[r.split()] for r in refs]
     hyps = [h.split() for h in hyps]
-    return corpus_bleu(refs, hyps, weights=(0.25, 0.25, 0.25, 0.25),
-                      smoothing_function=SmoothingFunction().method1)
+    return corpus_bleu(refs, hyps)
 
 
 class CaptionDataset(Dataset):
@@ -145,14 +139,14 @@ if __name__ == "__main__":
     vocab.build([cap for _, cap in pairs])
 
     ds = CaptionDataset("flickr30k_features.pkl", pairs, vocab)
-    train_ds, val_ds = random_split(ds, [int(0.9 * len(ds)), len(ds) - int(0.9 * len(ds))])
+    train_ds, val_ds = random_split(ds, [int(0.9 * len(ds)), int(0.1 * len(ds))])
 
     train_loader = DataLoader(train_ds, batch_size=64, shuffle=True, collate_fn=collate_batch)
     val_loader = DataLoader(val_ds, batch_size=64, collate_fn=collate_batch)
 
     model = ImageCaptioner(len(vocab.word2idx)).to(device)
     criterion = nn.CrossEntropyLoss(ignore_index=0)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters())
 
     history = {"train_loss": [], "val_loss": []}
     for epoch in range(10):
@@ -162,7 +156,8 @@ if __name__ == "__main__":
             feats, caps = feats.to(device), caps.to(device)
             optimizer.zero_grad()
             logits = model(feats, caps)
-            loss = criterion(logits.reshape(-1, logits.size(-1)), caps[:, 1:].reshape(-1))
+            targets = caps[:, 1:].flatten()
+            loss = criterion(logits.flatten(0, -2), targets)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
@@ -176,7 +171,8 @@ if __name__ == "__main__":
             for feats, caps in val_loader:
                 feats, caps = feats.to(device), caps.to(device)
                 logits = model(feats, caps)
-                loss = criterion(logits.reshape(-1, logits.size(-1)), caps[:, 1:].reshape(-1))
+                targets = caps[:, 1:].flatten()
+                loss = criterion(logits.flatten(0, -2), targets)
                 total += loss.item()
         val_loss = total / len(val_loader)
         history["val_loss"].append(val_loss)
