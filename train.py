@@ -1,9 +1,18 @@
 import pickle
+import re
 from collections import Counter
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader, random_split
 from tqdm import tqdm
+
+
+def sanitize_caption(text):
+    """Keep only letters (a-z), lowercase, and normalize spaces."""
+    text = text.lower().strip()
+    text = re.sub(r"[^a-z\s]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 
 
 class Vocabulary:
@@ -15,7 +24,7 @@ class Vocabulary:
         self.min_freq = min_freq
 
     def _tokenize(self, text):
-        return text.lower().strip().split()
+        return sanitize_caption(text).split()
 
     def build(self, captions):
         count = Counter()
@@ -46,7 +55,7 @@ def load_captions(path):
     for line in lines[1 if "image" in lines[0].lower() else 0:]:
         if "," in line:
             img, cap = line.strip().split(",", 1)
-            cap = cap.strip('"').strip()
+            cap = sanitize_caption(cap.strip('"').strip())
             if cap:
                 pairs.append((img.strip(), cap))
     return pairs
@@ -70,15 +79,14 @@ class ImageCaptioner(nn.Module):
         self.encoder = Encoder(2048, hidden)
         self.embed = nn.Embedding(vocab_size, embed, padding_idx=0)
         self.embed_dropout = nn.Dropout(dropout)
-        self.lstm = nn.LSTM(embed, hidden, batch_first=True, dropout=0)
+        self.gru = nn.GRU(embed, hidden, batch_first=True)
         self.fc_dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(hidden, vocab_size)
 
     def forward(self, feats, caps):
         h = self.encoder(feats).unsqueeze(0)
-        c = h.new_zeros(h.size())
         emb = self.embed_dropout(self.embed(caps[:, :-1]))
-        out, _ = self.lstm(emb, (h, c))
+        out, _ = self.gru(emb, h)
         out = self.fc_dropout(out)
         return self.fc(out)
 
@@ -87,13 +95,12 @@ def greedy_search(model, feat, vocab, max_len=50, device="cpu"):
     model.eval()
     feat = feat.to(device).unsqueeze(0)
     h = model.encoder(feat).unsqueeze(0)
-    c = h.new_zeros(h.size())
     tokens = [1]
     with torch.no_grad():
         for _ in range(max_len - 1):
             x = torch.tensor([[tokens[-1]]], dtype=torch.long, device=device)
             emb = model.embed(x)
-            out, (h, c) = model.lstm(emb, (h, c))
+            out, h = model.gru(emb, h)
             logits = model.fc(out.squeeze(1))
             next_id = logits.argmax(dim=-1).item()
             tokens.append(next_id)
