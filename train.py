@@ -100,7 +100,6 @@ def greedy_search(model, feat, vocab, max_len=50, device="cpu"):
                 break
     return vocab.decode(tokens)
 
-
 def compute_bleu4(refs, hyps):
     refs = [[r.split()] for r in refs]
     hyps = [h.split() for h in hyps]
