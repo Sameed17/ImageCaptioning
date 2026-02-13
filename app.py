@@ -1,11 +1,12 @@
 import streamlit as st
 import torch
+import torch.nn as nn
 import pickle
 import os
 from PIL import Image
 from io import BytesIO
 from train import ImageCaptioner, greedy_search, load_captions, Vocabulary
-from torchvision import transforms
+from torchvision import transforms, models
 
 # Page configuration
 st.set_page_config(
@@ -62,6 +63,42 @@ def load_model_and_data():
         st.stop()
 
 
+@st.cache_resource
+def load_feature_extractor():
+    """Load and cache the ResNet-50 feature extractor."""
+    device = torch.device("cpu")
+    resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+    # Remove the last classification layer to get features only
+    feature_extractor = nn.Sequential(*list(resnet.children())[:-1])
+    feature_extractor = feature_extractor.to(device)
+    feature_extractor.eval()
+    return feature_extractor, device
+
+
+def extract_features(image, feature_extractor, device):
+    """Extract ResNet-50 features from an image."""
+    # Ensure image is in RGB mode
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
+    
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            (0.485, 0.456, 0.406),
+            (0.229, 0.224, 0.225)
+        )
+    ])
+    
+    img_tensor = transform(image).unsqueeze(0).to(device)
+    
+    with torch.no_grad():
+        features = feature_extractor(img_tensor)
+        features = features.view(features.size(0), -1)  # Flatten to (1, 2048)
+    
+    return features
+
+
 def main():
     # Title and description
     st.title("Image Captioning")
@@ -69,6 +106,7 @@ def main():
     
     # Load model and data
     model, vocab, features, pairs = load_model_and_data()
+    feature_extractor, device = load_feature_extractor()
     
     # Sidebar with info
     with st.sidebar:
@@ -101,30 +139,14 @@ def main():
             if st.button("Generate Caption", use_container_width=True):
                 with st.spinner("Generating caption..."):
                     try:
-                        # Convert image to model input format
-                        transform = transforms.Compose([
-                            transforms.Resize((224, 224)),
-                            transforms.ToTensor(),
-                            transforms.Normalize(
-                                (0.485, 0.456, 0.406),
-                                (0.229, 0.224, 0.225)
-                            )
-                        ])
+                        # Extract features from the uploaded image
+                        feature = extract_features(image, feature_extractor, device)
                         
-                        img_tensor = transform(image).unsqueeze(0)
-                        
-                        # Extract features and generate caption
-                        with torch.no_grad():
-                            # Simple feature extraction using a pre-trained encoder
-                            device = "cpu"
-                            # Using a mock feature extraction for demo
-                            feature = torch.randn(1, 2048)  # Placeholder
-                        
+                        # Generate caption
                         caption = greedy_search(model, feature.squeeze(0), vocab, device=device)
                         
                         st.success("Caption Generated!")
-                        st.markdown(f"###Caption:\n**{caption}**")
-                        
+                        st.markdown(f"### Caption:\n**{caption}**")
                     except Exception as e:
                         st.error(f"Error generating caption: {str(e)}")
 
